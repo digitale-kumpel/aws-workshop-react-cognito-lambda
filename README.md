@@ -3,6 +3,9 @@
 This example implements an AWS infrastructure using terraform. It contains two simple react apps, cognito for user authentication and authorization and a simple lambda backend function that is called directly from the client.
 
 ## Init terraform
+Login to your aws account, for example by using `aws-vault login [YOURPROFILE]` and create a state bucket on your AWS, like `state.my.domain` and replace `terraform.backend.bucket` in `infra/main.ts` with this bucket. 
+Then replace the variables in `variable.ts` with appropriate values for your project. 
+After that run `terraform init` to download dependencies. Then rund `terraform plan` to see a list of all steps terraform will take to deploy your infrastructure. To actualy deploy run `terraform apply` and after carefuly reading type `YES`.
 
 ## Setup the infrastructure
 
