@@ -19,7 +19,7 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "deploy": "aws s3 sync ./build s3://nettrek.digitale-kumpel.ruhr/ticket",
+    "deploy": "aws s3 sync ./build s3://awsworkshop.ticketstore.digitale-kumpel.ruhr",
     "invalidate": "aws cloudfront create-invalidation --distribution-id EU0NS9X2F2VYJ --paths \"/ticket/*\""
   },
   "eslintConfig": {

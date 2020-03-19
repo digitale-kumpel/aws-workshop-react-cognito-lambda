@@ -15,14 +15,57 @@ resource "aws_s3_bucket" "nettrek-app-bucket" {
   bucket = var.name
 }
 
-resource "aws_s3_bucket_policy" "origin-policy" {
-  bucket = aws_s3_bucket.nettrek-app-bucket.bucket
-  policy = templatefile("${path.module}/policy.json", {
-    identity = aws_cloudfront_origin_access_identity.nettrek-origin.id
-    bucket = aws_s3_bucket.nettrek-app-bucket.id
-  })
+# popcorn app
+resource "aws_s3_bucket" "nettrek-popcorn-app-bucket" {
+  bucket = "awsworkshop.popcorn.digitale-kumpel.ruhr"
 }
 
+resource "aws_s3_bucket_policy" "origin-popcorn-policy" {
+  bucket = aws_s3_bucket.nettrek-popcorn-app-bucket.bucket
+  policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Id": "PolicyForCloudFrontPrivateContent",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity ${aws_cloudfront_origin_access_identity.nettrek-origin.id}"
+      },
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::${aws_s3_bucket.nettrek-popcorn-app-bucket.id}/*"
+    }
+  ]
+}
+EOF
+}
+
+# ticketstore app
+resource "aws_s3_bucket" "nettrek-ticketstore-app-bucket" {
+  bucket = "awsworkshop.ticketstore.digitale-kumpel.ruhr"
+}
+
+resource "aws_s3_bucket_policy" "origin-ticketstore-policy" {
+  bucket = aws_s3_bucket.nettrek-ticketstore-app-bucket.bucket
+  policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Id": "PolicyForCloudFrontPrivateContent",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity ${aws_cloudfront_origin_access_identity.nettrek-origin.id}"
+      },
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::${aws_s3_bucket.nettrek-ticketstore-app-bucket.id}/*"
+    }
+  ]
+}
+EOF
+}
+
+# cognito
 resource "aws_iam_role" "nettrek-popcorn" {
   name = "nettrek-cognito-popcorn-role"
   assume_role_policy = data.aws_iam_policy_document.cognito_trust.json
@@ -50,6 +93,7 @@ data "aws_iam_policy_document" "cognito_trust" {
   }
 }
 
+# lambda backend
 data "aws_iam_policy_document" "allow_lambda_backend_call-ticket" {
   statement {
     sid = "1"
@@ -86,7 +130,6 @@ resource "aws_iam_policy" "nettrek-lambda-access-ticket" {
   policy = data.aws_iam_policy_document.allow_lambda_backend_call-ticket.json
 }
 
-
 resource "aws_iam_role_policy_attachment" "nettrek-cognito-attachment-popcorn" {
   policy_arn = aws_iam_policy.nettrek-lambda-access-popcorn.arn
   role = aws_iam_role.nettrek-popcorn.name
@@ -101,22 +144,24 @@ resource "aws_cloudfront_origin_access_identity" "nettrek-origin" {
   comment = "Access to nettrek app in s3."
 }
 
-resource "aws_cloudfront_distribution" "cdn" {
+# CDN Popcorn App
+resource "aws_cloudfront_distribution" "cdn-popcorn" {
   enabled = true
   origin {
-    domain_name = aws_s3_bucket.nettrek-app-bucket.bucket_regional_domain_name
-    origin_id   = var.originId
+    domain_name = aws_s3_bucket.nettrek-popcorn-app-bucket.bucket_regional_domain_name
+    origin_id   = "popcorn-origin-id"
 
     s3_origin_config {
       origin_access_identity = aws_cloudfront_origin_access_identity.nettrek-origin.cloudfront_access_identity_path
     }
   }
+
   default_root_object = "index.html"
 
   default_cache_behavior {
     allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods   = ["GET", "HEAD"]
-    target_origin_id = var.originId
+    target_origin_id = "popcorn-origin-id"
 
     forwarded_values {
       query_string = false
@@ -131,6 +176,54 @@ resource "aws_cloudfront_distribution" "cdn" {
     default_ttl            = 3600
     max_ttl                = 86400
   }
+
+  price_class = "PriceClass_200"
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  viewer_certificate {
+    cloudfront_default_certificate = true
+  }
+}
+
+# CDN Ticket App
+resource "aws_cloudfront_distribution" "cdn-ticket" {
+  enabled = true
+
+  origin {
+    domain_name = aws_s3_bucket.nettrek-ticketstore-app-bucket.bucket_regional_domain_name
+    origin_id   = "ticketstore-origin-id"
+
+    s3_origin_config {
+      origin_access_identity = aws_cloudfront_origin_access_identity.nettrek-origin.cloudfront_access_identity_path
+    }
+  }
+
+  default_root_object = "index.html"
+
+  default_cache_behavior {
+    allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = "ticketstore-origin-id"
+
+    forwarded_values {
+      query_string = false
+
+      cookies {
+        forward = "none"
+      }
+    }
+
+    viewer_protocol_policy = "allow-all"
+    min_ttl                = 0
+    default_ttl            = 3600
+    max_ttl                = 86400
+  }
+
   price_class = "PriceClass_200"
 
   restrictions {
@@ -210,16 +303,24 @@ resource "aws_cognito_user_pool_client" "nettrek-app" {
 }
 
 
-output "cloudfront_id" {
-  value = aws_cloudfront_distribution.cdn.domain_name
+output "cloudfront-id-ticket" {
+  value = aws_cloudfront_distribution.cdn-ticket.domain_name
+}
+
+output "cloudfront-id-popcorn" {
+  value = aws_cloudfront_distribution.cdn-popcorn.domain_name
 }
 
 output "identity-pool-id" {
   value = aws_cognito_identity_pool.nettrek.id
 }
 
-output "invalidationid" {
-  value = aws_cloudfront_distribution.cdn.id
+output "invalidationid-ticket" {
+  value = aws_cloudfront_distribution.cdn-ticket.id
+}
+
+output "invalidationid-popcorn" {
+  value = aws_cloudfront_distribution.cdn-popcorn.id
 }
 
 output "user-pool-id" {
