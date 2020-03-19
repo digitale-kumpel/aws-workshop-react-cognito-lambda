@@ -1,0 +1,13 @@
+{
+  "name": "apps",
+  "private": true,
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "workspaces": [
+    "./*"
+  ],
+  "scripts": {
+    "deploy": "yarn workspaces run deploy"
+  }
+}
